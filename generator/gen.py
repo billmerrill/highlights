@@ -43,10 +43,21 @@ class Artifact:
             "%Y-%m-%d %H:%M:%S"
         )
 
+    @property
+    def date(self):
+        return datetime.date.fromtimestamp(self.time_bounds[0]).isoformat()
+
+    @property
+    def timestamp(self):
+        return self.time_bounds[0] if self.time_bounds else None
+
 
 def get_files(abs_root_dir):
     with os.scandir(abs_root_dir) as entries:
         files = [entry for entry in entries]
+        for dir in files:
+            if dir.is_dir():
+                files.extend(get_files(os.path.join(abs_root_dir, dir.name)))
     return files
 
 
@@ -160,7 +171,7 @@ def get_video_metadata(abs_video_path):
     # example format:2025-06-17T08:45:03-07:00
     if general_track.comapplequicktimecreationdate:
         timestamp_str = general_track.comapplequicktimecreationdate
-        timestamp = datetime.datetime.fromisoformat(timestamp_str).timestamp()
+        timestamp = int(datetime.datetime.fromisoformat(timestamp_str).timestamp())
 
     geo_bounds = ((lat, lon), (lat, lon))
     return timestamp, geo_bounds
@@ -170,7 +181,6 @@ def get_artifacts(src_files):
     artifacts = []
     for file in src_files:
         if file.is_file():
-            print(file.path)
             mime_type = magic.Magic(mime=True).from_file(file.path)
             file_size = file.stat().st_size
             file_info = FileInfo(
@@ -222,14 +232,84 @@ def get_artifacts(src_files):
     return artifacts
 
 
+#
+# Travelogue[]
+
+
+@dataclass
+class Day:
+    _: dataclasses.KW_ONLY
+    date: str
+    artifacts: list[Artifact] = dataclasses.field(default_factory=list)
+
+    def sort(self):
+        self.artifacts.sort(key=lambda x: x.timestamp if x.timestamp else 0)
+
+
+@dataclass
+class Travelogue:
+    _: dataclasses.KW_ONLY
+    data: dict[str, "Day"] = dataclasses.field(default_factory=dict)
+    start_date: Optional[datetime.datetime] = None
+    end_date: Optional[datetime.datetime] = None
+
+    def insert_artifact(self, artifact: Artifact):
+        date = artifact.date
+        if date not in self.data:
+            self.data[date] = Day(date=date, artifacts=[])
+        self.data[date].artifacts.append(artifact)
+
+        # Update start and end dates
+        if not self.start_date or artifact.timestamp < self.start_date.timestamp():
+            self.start_date = datetime.datetime.fromtimestamp(artifact.timestamp)
+        if not self.end_date or artifact.timestamp > self.end_date.timestamp():
+            self.end_date = datetime.datetime.fromtimestamp(artifact.timestamp)
+
+    def summarize(self):
+        summary = {
+            "start_date": self.start_date.isoformat() if self.start_date else None,
+            "end_date": self.end_date.isoformat() if self.end_date else None,
+            "days": {},
+        }
+        for date, day in self.data.items():
+            summary["days"][date] = {
+                "artifacts_count": len(day.artifacts),
+                "artifacts": [
+                    f"{datetime.datetime.fromtimestamp(artifact.timestamp).isoformat()}: {artifact.filepath.split('/')[-1]}"
+                    for artifact in day.artifacts
+                ],
+            }
+        return summary
+
+
+def bulk_load_artifacts(travelogue, artifacts):
+    for artifact in artifacts:
+        if artifact.date not in travelogue.data:
+            travelogue.data[artifact.date] = Day(date=artifact.date)
+            travelogue.data[artifact.date].artifacts = []
+        travelogue.data[artifact.date].artifacts.append(artifact)
+
+    for day in travelogue.data:
+        travelogue.data[day].sort()
+
+    return travelogue
+
+
 def main():
-    abs_home_dir = "/Users/bill/code/highlights/example-data/kootskoot"
     abs_home_dir = "/Users/bill/code/highlights/example-data/gpses"
     abs_home_dir = "/Users/bill/code/highlights/example-data/aday/Jun 17"
+    abs_home_dir = "/Users/bill/code/highlights/example-data/kootskoot"
     src_files = get_files(abs_home_dir)
     artifacts = get_artifacts(src_files)
-    print(src_files)
-    print(artifacts)
+    print(len(artifacts))
+
+    travelogue = Travelogue()
+    travelogue = bulk_load_artifacts(travelogue, artifacts)
+    import pprint
+
+    pprint.pprint(travelogue.summarize())
+
+    # print(src_files)
 
 
 if __name__ == "__main__":
