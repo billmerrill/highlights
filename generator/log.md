@@ -10,3 +10,14 @@ First milestone generator
 Later Milestone ideas: do no do
 - generate an attractive path that shows the progression on a map when traces are not available
 - reduction of existing traces to thumbnail the event
+
+
+Jul 1, 2025 at 10:48:56 AM
+Progress
+- Reading the file structure
+- gathering metadata for gpx and image
+
+Next up
+- reading video metadata (this looks like it'll be a long term pita)
+- assemble artifact calendar
+- generate geojson

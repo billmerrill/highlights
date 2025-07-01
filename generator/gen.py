@@ -4,10 +4,13 @@ import datetime
 from dataclasses import dataclass
 from typing import Optional, Tuple
 import os
+import re
 import xml.etree.ElementTree as ET
 
 import magic
 import gpxpy
+import exifread
+from pymediainfo import MediaInfo
 
 
 FileInfo = namedtuple("FileInfo", ["file_path", "mime_type", "file_size"])
@@ -66,25 +69,6 @@ def is_gpx(file_path):
         return False
 
 
-# def parse_gpx(file_path):
-#     gpx = gpxpy.parse(file_path)
-#     time_bounds = gpx.get_time_bounds()
-#     return {'time_point': time_bounds.start_time,
-#             'start_time': time_bounds.start_time,
-#             'end_time': time_bounds.end_time}
-
-
-# def get_event_data(dir_entries):
-#     event_stream = []
-
-#     for entry in dir_entries:
-#         ev = {'file_metadata': entry}
-#         if dir_entry.mime_type == 'text/xml':
-#             if is_gpx(entry['file_path']):
-#                 ev['type'] = GPX
-#                 ev[''] = parse_gpx(entry.file_path)
-
-
 def summarize_gpx(file_path):
     """
     Preference order:
@@ -122,6 +106,66 @@ def summarize_gpx(file_path):
     return time_start, time_end, geo_start, geo_end
 
 
+def get_exif_data(image_path):
+    with open(image_path, "rb") as f:
+        tags = exifread.process_file(f)
+
+    timestamp, latitude, longitude = None, None, None
+
+    # Check if GPS info exists
+    if "GPS GPSLatitude" in tags or "GPS GPSLongitude" in tags:
+        lat = tags["GPS GPSLatitude"].values
+        lat_ref = tags["GPS GPSLatitudeRef"].values
+        lon = tags["GPS GPSLongitude"].values
+        lon_ref = tags["GPS GPSLongitudeRef"].values
+
+        # Convert to decimal degrees
+        def dms_to_decimal(dms, ref):
+            degrees = float(dms[0])
+            minutes = float(dms[1])
+            seconds = float(dms[2])
+            decimal = degrees + minutes / 60 + seconds / 3600
+            if ref in ["S", "W"]:
+                decimal = -decimal
+            return decimal
+
+        latitude = dms_to_decimal(lat, lat_ref)
+        longitude = dms_to_decimal(lon, lon_ref)
+
+    if "Image DateTime" in tags:
+        timestamp = tags["Image DateTime"].values
+        timestamp = int(
+            datetime.datetime.strptime(timestamp, "%Y:%m:%d %H:%M:%S").timestamp()
+        )
+
+    return timestamp, latitude, longitude
+
+
+def get_video_metadata(abs_video_path):
+    # currently written to use iphone video metadata
+    lat, lon = None, None
+    timestamp = None
+
+    media_info = MediaInfo.parse(abs_video_path)
+    general_track = media_info.general_tracks[0]
+
+    # example format: +49.9884-117.3743+000.000/
+    if general_track.comapplequicktimelocationiso6709:
+        loc = general_track.comapplequicktimelocationiso6709.rstrip("/")
+        pattern = r"([+-]\d+\.\d+)([+-]\d+\.\d+)(?:([+-]\d+\.\d+))?"
+        match = re.match(pattern, loc)
+        lat = float(match.group(1))
+        lon = float(match.group(2))
+
+    # example format:2025-06-17T08:45:03-07:00
+    if general_track.comapplequicktimecreationdate:
+        timestamp_str = general_track.comapplequicktimecreationdate
+        timestamp = datetime.datetime.fromisoformat(timestamp_str).timestamp()
+
+    geo_bounds = ((lat, lon), (lat, lon))
+    return timestamp, geo_bounds
+
+
 def get_artifacts(src_files):
     artifacts = []
     for file in src_files:
@@ -133,17 +177,47 @@ def get_artifacts(src_files):
                 file_path=file.path, mime_type=mime_type, file_size=file_size
             )
 
-            if is_gpx(file.path):
-                time_start, time_end, geo_start, geo_end = summarize_gpx(
-                    file_info.file_path
-                )
+            if mime_type == "text/xml" or mime_type == "application/gpx+xml":
+                if is_gpx(file.path):
+                    time_start, time_end, geo_start, geo_end = summarize_gpx(
+                        file_info.file_path
+                    )
+                    artifact = Artifact(
+                        artifact_type=GPX,
+                        filepath=file_info.file_path,
+                        time_bounds=(time_start, time_end),
+                        geo_bounds=(geo_start, geo_end),
+                    )
+                    artifacts.append(artifact)
+
+            elif mime_type.startswith("image/"):
+                # Extract EXIF data for geo point if available
+
+                timestamp, latitude, longitude = get_exif_data(file_info.file_path)
+
                 artifact = Artifact(
-                    artifact_type=GPX,
+                    artifact_type=IMAGE,
                     filepath=file_info.file_path,
-                    time_bounds=(time_start, time_end),
-                    geo_bounds=(geo_start, geo_end),
+                    artifact_size=file_info.file_size,
+                    time_bounds=(timestamp, timestamp),
+                    geo_bounds=((latitude, longitude), (latitude, longitude)),
                 )
                 artifacts.append(artifact)
+
+            elif mime_type.startswith("video/"):
+                timestamp, geo_bounds = get_video_metadata(file_info.file_path)
+                artifact = Artifact(
+                    artifact_type=VIDEO,
+                    filepath=file_info.file_path,
+                    artifact_size=file_info.file_size,
+                    time_bounds=(timestamp, timestamp),
+                    geo_bounds=geo_bounds,
+                )
+                artifacts.append(artifact)
+            else:
+                print(
+                    f"Unsupported file type: {file_info.mime_type} for {file_info.file_path}"
+                )
 
     return artifacts
 
@@ -151,6 +225,7 @@ def get_artifacts(src_files):
 def main():
     abs_home_dir = "/Users/bill/code/highlights/example-data/kootskoot"
     abs_home_dir = "/Users/bill/code/highlights/example-data/gpses"
+    abs_home_dir = "/Users/bill/code/highlights/example-data/aday/Jun 17"
     src_files = get_files(abs_home_dir)
     artifacts = get_artifacts(src_files)
     print(src_files)
