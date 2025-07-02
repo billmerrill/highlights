@@ -52,6 +52,7 @@ class Artifact:
         return self.time_bounds[0] if self.time_bounds else None
 
 
+
 def get_files(abs_root_dir):
     with os.scandir(abs_root_dir) as entries:
         files = [entry for entry in entries]
@@ -282,6 +283,7 @@ class Travelogue:
         return summary
 
 
+
 def bulk_load_artifacts(travelogue, artifacts):
     for artifact in artifacts:
         if artifact.date not in travelogue.data:
@@ -301,12 +303,11 @@ def main():
     abs_home_dir = "/Users/bill/code/highlights/example-data/kootskoot"
     src_files = get_files(abs_home_dir)
     artifacts = get_artifacts(src_files)
-    print(len(artifacts))
+    artifacts.sort(key=lambda x: x.timestamp if x.timestamp else 0)
 
     travelogue = Travelogue()
     travelogue = bulk_load_artifacts(travelogue, artifacts)
     import pprint
-
     pprint.pprint(travelogue.summarize())
 
     # print(src_files)
