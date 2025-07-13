@@ -1,14 +1,16 @@
-from collections import namedtuple
+from collections import namedtuple, defaultdict
 import dataclasses
 import datetime
 from dataclasses import dataclass
 from typing import Optional, Tuple
 import os
+from pprint import pprint
 import re
 import xml.etree.ElementTree as ET
 
 import magic
 import gpxpy
+import geojson
 import exifread
 from pymediainfo import MediaInfo
 
@@ -246,6 +248,12 @@ class Day:
     def sort(self):
         self.artifacts.sort(key=lambda x: x.timestamp if x.timestamp else 0)
 
+    # implement an interator for the day
+    def __iter__(self):
+        for artifact in sorted(self.artifacts, key=lambda x: x.timestamp if x.timestamp else 0):
+            yield artifact  
+
+
 
 @dataclass
 class Travelogue:
@@ -282,6 +290,12 @@ class Travelogue:
             }
         return summary
 
+    ### implement a day based iterated for the travelogue
+    def __iter__(self):
+        for date in sorted(self.data.keys()):
+            yield self.data[date]   
+
+
 
 
 def bulk_load_artifacts(travelogue, artifacts):
@@ -296,6 +310,48 @@ def bulk_load_artifacts(travelogue, artifacts):
 
     return travelogue
 
+def gpx_to_geojson_features(gpx_file_path):
+    """ Conver Tracks to LineString features, ignore waypoints for now. """
+    with open(gpx_file_path, 'r') as gpx_file:
+        gpx = gpxpy.parse(gpx_file)
+    
+    features = []
+    
+    for track in gpx.tracks:
+        for segment in track.segments:
+            coordinates = []
+            for point in segment.points:
+                coordinates.append([point.longitude, point.latitude])
+
+            feature = {
+                "type": "Feature",
+                "geometry": {
+                    "type": "LineString",
+                    "coordinates": coordinates
+                },
+                "properties": {
+                    "name": track.name,
+                    "type": "track"
+                }
+            }
+            features.append(feature)
+    
+    # Convert waypoints to Point features
+    # for waypoint in gpx.waypoints:
+    #     feature = {
+    #         "type": "Feature",
+    #         "geometry": {
+    #             "type": "Point",
+    #             "coordinates": [waypoint.longitude, waypoint.latitude]
+    #         },
+    #         "properties": {
+    #             "name": waypoint.name,
+    #             "type": "waypoint"
+    #         }
+    #     }
+    #     features.append(feature)
+    
+    return features
 
 def main():
     abs_home_dir = "/Users/bill/code/highlights/example-data/gpses"
@@ -307,10 +363,23 @@ def main():
 
     travelogue = Travelogue()
     travelogue = bulk_load_artifacts(travelogue, artifacts)
-    import pprint
-    pprint.pprint(travelogue.summarize())
+    pprint(travelogue.summarize())
 
-    # print(src_files)
+    features_by_day = defaultdict(list)
+    for day in travelogue:
+        print(f"Day: {day.date}")
+        features_by_day[day.date] = []
+        for artifact in day:
+            # if gpx file, convert to geojson features
+
+            if artifact.artifact_type == GPX:
+                features = gpx_to_geojson_features(artifact.filepath)
+                features_by_day[day.date].extend(features)  
+                print(f"  {artifact.filepath} - {len(features)} features")
+
+    pprint(features_by_day)
+
+
 
 
 if __name__ == "__main__":

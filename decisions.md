@@ -14,5 +14,9 @@
 - Camps are associated with the Day they are reached, and multiple days for layovers.
 - Artifacts are ordered in Days in the Travelogue.  The user may reorder or move Artifacts within or across Days
 
+## GeoJSON mappings
+- FeatureCollections per day
+- LineStrings Per GPX Track (could be multiple per file, multiple per day)
+
 ## UX
 - 

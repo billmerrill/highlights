@@ -8,6 +8,7 @@ dependencies = [
     "black>=25.1.0",
     "exifread>=3.3.1",
     "exiv2>=0.17.3",
+    "geojson>=3.2.0",
     "gpxpy>=1.6.2",
     "lxml>=6.0.0",
     "pymediainfo>=7.0.1",
