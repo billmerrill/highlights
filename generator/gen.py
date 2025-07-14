@@ -37,7 +37,7 @@ class Artifact:
     time_bounds: Optional[Tuple[int, int]] = None  # (time_start, time_end)
 
     def __repr__(self):
-        return f"Artifact(type={self.time_str(self.time_bounds[0])}, geo_bounds={self.geo_bounds}, time_bounds={self.time_bounds})\n"
+        return f"Artifact(name={self.informal_name} type={self.artifact_type}, geo_bounds={self.geo_bounds}, time_bounds={self.time_bounds}, geo_bounds={self.geo_bounds})"
 
     @staticmethod
     def time_str(unix_timestamp):
@@ -53,6 +53,70 @@ class Artifact:
     def timestamp(self):
         return self.time_bounds[0] if self.time_bounds else None
 
+    @property
+    def informal_name(self):
+        if self.artifact_type == GPX:
+            return os.path.basename(self.filepath)
+        elif self.artifact_type in (IMAGE, VIDEO):
+            return os.path.basename(self.filepath)
+        else:
+            return f"Artifact({self.artifact_type}) - {os.path.basename(self.filepath)}"
+
+@dataclass
+class Day:
+    _: dataclasses.KW_ONLY
+    date: str
+    artifacts: list[Artifact] = dataclasses.field(default_factory=list)
+
+    def sort(self):
+        self.artifacts.sort(key=lambda x: x.timestamp if x.timestamp else 0)
+
+    # implement an interator for the day
+    def __iter__(self):
+        for artifact in sorted(self.artifacts, key=lambda x: x.timestamp if x.timestamp else 0):
+            yield artifact  
+
+
+
+@dataclass
+class Travelogue:
+    _: dataclasses.KW_ONLY
+    data: dict[str, "Day"] = dataclasses.field(default_factory=dict)
+    start_date: Optional[datetime.datetime] = None
+    end_date: Optional[datetime.datetime] = None
+
+    def insert_artifact(self, artifact: Artifact):
+        date = artifact.date
+        if date not in self.data:
+            self.data[date] = Day(date=date, artifacts=[])
+        self.data[date].artifacts.append(artifact)
+
+        # Update start and end dates
+        if not self.start_date or artifact.timestamp < self.start_date.timestamp():
+            self.start_date = datetime.datetime.fromtimestamp(artifact.timestamp)
+        if not self.end_date or artifact.timestamp > self.end_date.timestamp():
+            self.end_date = datetime.datetime.fromtimestamp(artifact.timestamp)
+
+    def summarize(self):
+        summary = {
+            "start_date": self.start_date.isoformat() if self.start_date else None,
+            "end_date": self.end_date.isoformat() if self.end_date else None,
+            "days": {},
+        }
+        for date, day in self.data.items():
+            summary["days"][date] = {
+                "artifacts_count": len(day.artifacts),
+                "artifacts": [
+                    f"{datetime.datetime.fromtimestamp(artifact.timestamp).isoformat()}: {artifact}"
+                    for artifact in day.artifacts
+                ],
+            }
+        return summary
+
+    ### implement a day based iterated for the travelogue
+    def __iter__(self):
+        for date in sorted(self.data.keys()):
+            yield self.data[date]   
 
 
 def get_files(abs_root_dir):
@@ -176,8 +240,7 @@ def get_video_metadata(abs_video_path):
         timestamp_str = general_track.comapplequicktimecreationdate
         timestamp = int(datetime.datetime.fromisoformat(timestamp_str).timestamp())
 
-    geo_bounds = ((lat, lon), (lat, lon))
-    return timestamp, geo_bounds
+    return timestamp, lat, lon
 
 
 def get_artifacts(src_files):
@@ -218,13 +281,13 @@ def get_artifacts(src_files):
                 artifacts.append(artifact)
 
             elif mime_type.startswith("video/"):
-                timestamp, geo_bounds = get_video_metadata(file_info.file_path)
+                timestamp, latitude, longitude = get_video_metadata(file_info.file_path)
                 artifact = Artifact(
                     artifact_type=VIDEO,
                     filepath=file_info.file_path,
                     artifact_size=file_info.file_size,
                     time_bounds=(timestamp, timestamp),
-                    geo_bounds=geo_bounds,
+                    geo_bounds=((latitude, longitude), (latitude, longitude)),
                 )
                 artifacts.append(artifact)
             else:
@@ -239,61 +302,7 @@ def get_artifacts(src_files):
 # Travelogue[]
 
 
-@dataclass
-class Day:
-    _: dataclasses.KW_ONLY
-    date: str
-    artifacts: list[Artifact] = dataclasses.field(default_factory=list)
 
-    def sort(self):
-        self.artifacts.sort(key=lambda x: x.timestamp if x.timestamp else 0)
-
-    # implement an interator for the day
-    def __iter__(self):
-        for artifact in sorted(self.artifacts, key=lambda x: x.timestamp if x.timestamp else 0):
-            yield artifact  
-
-
-
-@dataclass
-class Travelogue:
-    _: dataclasses.KW_ONLY
-    data: dict[str, "Day"] = dataclasses.field(default_factory=dict)
-    start_date: Optional[datetime.datetime] = None
-    end_date: Optional[datetime.datetime] = None
-
-    def insert_artifact(self, artifact: Artifact):
-        date = artifact.date
-        if date not in self.data:
-            self.data[date] = Day(date=date, artifacts=[])
-        self.data[date].artifacts.append(artifact)
-
-        # Update start and end dates
-        if not self.start_date or artifact.timestamp < self.start_date.timestamp():
-            self.start_date = datetime.datetime.fromtimestamp(artifact.timestamp)
-        if not self.end_date or artifact.timestamp > self.end_date.timestamp():
-            self.end_date = datetime.datetime.fromtimestamp(artifact.timestamp)
-
-    def summarize(self):
-        summary = {
-            "start_date": self.start_date.isoformat() if self.start_date else None,
-            "end_date": self.end_date.isoformat() if self.end_date else None,
-            "days": {},
-        }
-        for date, day in self.data.items():
-            summary["days"][date] = {
-                "artifacts_count": len(day.artifacts),
-                "artifacts": [
-                    f"{datetime.datetime.fromtimestamp(artifact.timestamp).isoformat()}: {artifact.filepath.split('/')[-1]}"
-                    for artifact in day.artifacts
-                ],
-            }
-        return summary
-
-    ### implement a day based iterated for the travelogue
-    def __iter__(self):
-        for date in sorted(self.data.keys()):
-            yield self.data[date]   
 
 
 
@@ -336,27 +345,12 @@ def gpx_to_geojson_features(gpx_file_path):
             }
             features.append(feature)
     
-    # Convert waypoints to Point features
-    # for waypoint in gpx.waypoints:
-    #     feature = {
-    #         "type": "Feature",
-    #         "geometry": {
-    #             "type": "Point",
-    #             "coordinates": [waypoint.longitude, waypoint.latitude]
-    #         },
-    #         "properties": {
-    #             "name": waypoint.name,
-    #             "type": "waypoint"
-    #         }
-    #     }
-    #     features.append(feature)
-    
     return features
 
 def main():
     abs_home_dir = "/Users/bill/code/highlights/example-data/gpses"
-    abs_home_dir = "/Users/bill/code/highlights/example-data/aday/Jun 17"
     abs_home_dir = "/Users/bill/code/highlights/example-data/kootskoot"
+    abs_home_dir = "/Users/bill/code/highlights/example-data/aday/Jun 17"
     output_dir = "/Users/bill/code/highlights/generator/output"
     src_files = get_files(abs_home_dir)
     artifacts = get_artifacts(src_files)
@@ -364,8 +358,9 @@ def main():
 
     travelogue = Travelogue()
     travelogue = bulk_load_artifacts(travelogue, artifacts)
-    pprint(travelogue.summarize())
+    print(travelogue.summarize())
 
+    return
     features_by_day = defaultdict(list)
     for day in travelogue:
         print(f"Day: {day.date}")
