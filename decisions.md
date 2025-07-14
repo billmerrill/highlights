@@ -17,6 +17,7 @@
 ## GeoJSON mappings
 - FeatureCollections per day
 - LineStrings Per GPX Track (could be multiple per file, multiple per day)
+- Artifacts without locations will be groups with its day in the view.
 
 ## UX
 - 

@@ -4,7 +4,7 @@ import datetime
 from dataclasses import dataclass
 from typing import Optional, Tuple
 import os
-from pprint import pprint
+from pprint import pprint, pp
 import re
 import xml.etree.ElementTree as ET
 
@@ -37,7 +37,7 @@ class Artifact:
     time_bounds: Optional[Tuple[int, int]] = None  # (time_start, time_end)
 
     def __repr__(self):
-        return f"Artifact(name={self.informal_name} type={self.artifact_type}, geo_bounds={self.geo_bounds}, time_bounds={self.time_bounds}, geo_bounds={self.geo_bounds})"
+        return f"Artifact(name={self.informal_name}, type={self.artifact_type}, geo_bounds={self.geo_bounds}, time_bounds={self.time_bounds}, geo_bounds={self.geo_bounds})"
 
     @staticmethod
     def time_str(unix_timestamp):
@@ -61,6 +61,12 @@ class Artifact:
             return os.path.basename(self.filepath)
         else:
             return f"Artifact({self.artifact_type}) - {os.path.basename(self.filepath)}"
+
+    @property
+    def has_geo(self):
+        return self.geo_bounds is not None and all(
+            coord is not None for coord in self.geo_bounds[0] + self.geo_bounds[1]
+        )
 
 @dataclass
 class Day:
@@ -112,6 +118,7 @@ class Travelogue:
                 ],
             }
         return summary
+
 
     ### implement a day based iterated for the travelogue
     def __iter__(self):
@@ -347,23 +354,11 @@ def gpx_to_geojson_features(gpx_file_path):
     
     return features
 
-def main():
-    abs_home_dir = "/Users/bill/code/highlights/example-data/gpses"
-    abs_home_dir = "/Users/bill/code/highlights/example-data/kootskoot"
-    abs_home_dir = "/Users/bill/code/highlights/example-data/aday/Jun 17"
-    output_dir = "/Users/bill/code/highlights/generator/output"
-    src_files = get_files(abs_home_dir)
-    artifacts = get_artifacts(src_files)
-    artifacts.sort(key=lambda x: x.timestamp if x.timestamp else 0)
-
-    travelogue = Travelogue()
-    travelogue = bulk_load_artifacts(travelogue, artifacts)
-    print(travelogue.summarize())
-
-    return
+def translate_to_geojson(travelogue):
     features_by_day = defaultdict(list)
+
     for day in travelogue:
-        print(f"Day: {day.date}")
+        # print(f"Day: {day.date}")
         features_by_day[day.date] = []
         for artifact in day:
             # if gpx file, convert to geojson features
@@ -371,7 +366,7 @@ def main():
             if artifact.artifact_type == GPX:
                 features = gpx_to_geojson_features(artifact.filepath)
                 features_by_day[day.date].extend(features)  
-                print(f"  {artifact.filepath} - {len(features)} features")
+                # print(f"  {artifact.filepath} - {len(features)} features")
 
             if artifact.artifact_type in (IMAGE, VIDEO):
                 feature = {
@@ -387,14 +382,37 @@ def main():
                     }
                 }
                 features_by_day[day.date].append(feature)
-                print(f"  {artifact.filepath} - {artifact.artifact_type}")
+                # print(f"  {artifact.filepath} - {artifact.artifact_type}")
 
-    feature_collections = []
+    return features_by_day
+
+def output_days_files(features_by_day, output_dir):
     for date, features in features_by_day.items():
         feature_collection = geojson.FeatureCollection(features)
         with open(os.path.join(output_dir, f"koot-{date}.geojson"), "w") as fh:
             geojson.dump(feature_collection, fh)
             print(f"Saved {len(features)} features for {date} to {output_dir}/{date}.geojson")
+
+
+def main():
+    abs_home_dir = "/Users/bill/code/highlights/example-data/gpses"
+    abs_home_dir = "/Users/bill/code/highlights/example-data/kootskoot"
+    abs_home_dir = "/Users/bill/code/highlights/example-data/aday/Jun 17"
+    output_dir = "/Users/bill/code/highlights/generator/output"
+
+    # extract
+    src_files = get_files(abs_home_dir)
+    artifacts = get_artifacts(src_files)
+    artifacts.sort(key=lambda x: x.timestamp if x.timestamp else 0)
+
+    # transform
+    travelogue = Travelogue()
+    travelogue = bulk_load_artifacts(travelogue, artifacts)
+    pp(travelogue, compact=True)
+    features_by_day = translate_to_geojson(travelogue)
+
+    # load
+    output_days_files(features_by_day, output_dir)
 
 if __name__ == "__main__":
     main()

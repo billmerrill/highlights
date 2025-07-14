@@ -43,3 +43,14 @@ Later ideas - not for today
     - extractors - readers
     - translators
     - loaders - builders
+
+
+Jul 14, 2025 at 8:44:12 AM
+Past
+- geojson features are generated for tracks
+Today
+- geojson features are generated for media
+- geojson files are generated for a travelogue
+Next
+- assemble a quick web viewer
+- OR nuke and move to sqlite... probably not for now, keep it loose like PhonedIn
