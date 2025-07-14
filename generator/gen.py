@@ -357,6 +357,7 @@ def main():
     abs_home_dir = "/Users/bill/code/highlights/example-data/gpses"
     abs_home_dir = "/Users/bill/code/highlights/example-data/aday/Jun 17"
     abs_home_dir = "/Users/bill/code/highlights/example-data/kootskoot"
+    output_dir = "/Users/bill/code/highlights/generator/output"
     src_files = get_files(abs_home_dir)
     artifacts = get_artifacts(src_files)
     artifacts.sort(key=lambda x: x.timestamp if x.timestamp else 0)
@@ -377,10 +378,28 @@ def main():
                 features_by_day[day.date].extend(features)  
                 print(f"  {artifact.filepath} - {len(features)} features")
 
-    pprint(features_by_day)
+            if artifact.artifact_type in (IMAGE, VIDEO):
+                feature = {
+                    "type": "Feature",
+                    "geometry": {
+                        "type": "Point",
+                        "coordinates": artifact.geo_bounds[0]
+                    },
+                    "properties": {
+                        "filepath": artifact.filepath,
+                        "type": artifact.artifact_type,
+                        "timestamp": artifact.timestamp,
+                    }
+                }
+                features_by_day[day.date].append(feature)
+                print(f"  {artifact.filepath} - {artifact.artifact_type}")
 
-
-
+    feature_collections = []
+    for date, features in features_by_day.items():
+        feature_collection = geojson.FeatureCollection(features)
+        with open(os.path.join(output_dir, f"koot-{date}.geojson"), "w") as fh:
+            geojson.dump(feature_collection, fh)
+            print(f"Saved {len(features)} features for {date} to {output_dir}/{date}.geojson")
 
 if __name__ == "__main__":
     main()
