@@ -20,4 +20,9 @@
 - Artifacts without locations will be groups with its day in the view.
 
 ## UX
-- 
+- Point artifacts (images, videos (sorta)) will be displayed at their location if 
+    one exists.  If the item isn't geolocated, we'll try to associated it with a 
+    near location. 
+    - Now: The first approximation is the most recent location
+    - Future Improvement: future efforts could look up the time in a gpx or interpolate from surrounding 
+        artifact locations

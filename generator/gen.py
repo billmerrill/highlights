@@ -68,6 +68,17 @@ class Artifact:
             coord is not None for coord in self.geo_bounds[0] + self.geo_bounds[1]
         )
 
+    @property
+    def geojson_point(self):
+        pt_of_return = self.geo_point
+        if not pt_of_return :
+            pt_of_return = self.geo_bounds[0]
+
+        if not pt_of_return or any(element is None for element in pt_of_return):
+            return None
+        
+        return [pt_of_return[1], pt_of_return[0]]
+
 @dataclass
 class Day:
     _: dataclasses.KW_ONLY
@@ -355,7 +366,16 @@ def gpx_to_geojson_features(gpx_file_path):
     return features
 
 def translate_to_geojson(travelogue):
+    """
+    Image and Video without geo information are assigned to the most recent
+    point location if one is availabe.  If not, they'll not be included.
+
+    A future improvement could
+    - check for a location by time in a GPX
+    - interpolate the location between most recent and and next locations.
+    """
     features_by_day = defaultdict(list)
+    most_recent_local = None
 
     for day in travelogue:
         # print(f"Day: {day.date}")
@@ -366,23 +386,26 @@ def translate_to_geojson(travelogue):
             if artifact.artifact_type == GPX:
                 features = gpx_to_geojson_features(artifact.filepath)
                 features_by_day[day.date].extend(features)  
-                # print(f"  {artifact.filepath} - {len(features)} features")
 
             if artifact.artifact_type in (IMAGE, VIDEO):
-                feature = {
-                    "type": "Feature",
-                    "geometry": {
-                        "type": "Point",
-                        "coordinates": artifact.geo_bounds[0]
-                    },
-                    "properties": {
-                        "filepath": artifact.filepath,
-                        "type": artifact.artifact_type,
-                        "timestamp": artifact.timestamp,
+                artifact_location = artifact.geojson_point
+                if artifact_location is None and most_recent_local is not None:
+                    artifact_location = most_recent_local
+                if artifact_location is not None:
+                    feature = {
+                        "type": "Feature",
+                        "geometry": {
+                            "type": "Point",
+                            "coordinates": artifact.geojson_point
+                        },
+                        "properties": {
+                            "filepath": artifact.filepath,
+                            "type": artifact.artifact_type,
+                            "timestamp": artifact.timestamp,
+                        }
                     }
-                }
-                features_by_day[day.date].append(feature)
-                # print(f"  {artifact.filepath} - {artifact.artifact_type}")
+                    most_recent_location = artifact.geojson_point
+                    features_by_day[day.date].append(feature)
 
     return features_by_day
 
@@ -396,8 +419,8 @@ def output_days_files(features_by_day, output_dir):
 
 def main():
     abs_home_dir = "/Users/bill/code/highlights/example-data/gpses"
-    abs_home_dir = "/Users/bill/code/highlights/example-data/kootskoot"
     abs_home_dir = "/Users/bill/code/highlights/example-data/aday/Jun 17"
+    abs_home_dir = "/Users/bill/code/highlights/example-data/kootskoot"
     output_dir = "/Users/bill/code/highlights/generator/output"
 
     # extract
