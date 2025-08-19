@@ -26,3 +26,6 @@
     - Now: The first approximation is the most recent location
     - Future Improvement: future efforts could look up the time in a gpx or interpolate from surrounding 
         artifact locations
+- We should be able to mix trips and days.  Multiple sources of "day" data
+    will be polled to generate the gallery view... trips will be able to be 
+    viewed separately from other artifacts on the day.
