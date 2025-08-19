@@ -30,8 +30,14 @@ async function loadTravelogueGeojson(config, leafletMap) {
             // rotate through colors as adding new lines
             const color = getColorForLine(colorIndex);
             L.geoJSON(geojson, {
-                style: function () {
-                    return { color: color };
+                style: function (feature) {
+                    if (feature.geometry.type === 'LineString' || feature.geometry.type === 'MultiLineString') {
+                        return { 
+                            color: color,
+                            opacity: 0.4,
+                            weight: 20
+                         };
+                    }
                 }
             }).addTo(leafletMap);
         } catch (err) {
