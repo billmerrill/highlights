@@ -54,7 +54,4 @@ function loadTrip(config, map) {
 	function onEachFeature(feature, layer) {
 		layer.bindPopup(`<strong>${feature.properties.label}</strong><br\>${feature.properties.type}, ${feature.properties.date}`);
 	}
-
-    // filter objects by geo availability, don't show artifacts without geo info
-    const filteredArtifacts = day.artifacts.filter(artifact => artifact.has_geo);
 }
