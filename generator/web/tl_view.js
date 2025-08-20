@@ -24,6 +24,40 @@ async function loadTravelogueGeojson(config, leafletMap) {
 			popupAnchor:[0,-20]
 		}
 	)
+    const artifactClusterIcon = L.icon({
+			iconUrl:"/assets/babyloupeplus.png", 
+			// iconRetinaUrl:"/tent144.png", 
+			iconSize:[39,39],
+			iconAnchor:[20,20],
+			popupAnchor:[0,-20]
+		}
+	)
+
+
+    var markers = L.markerClusterGroup({
+        // Cluster radius in pixels
+        maxClusterRadius: 40,
+
+        // Disable clustering at certain zoom level
+        disableClusteringAtZoom: 15,
+
+        // Animation options
+        animate: true,
+        animateAddingMarkers: true,
+
+        // Custom cluster icon
+        iconCreateFunction: function (cluster) {
+            var count = cluster.getChildCount();
+            var size = count < 10 ? 'small' : count < 100 ? 'medium' : 'large';
+
+            return artifactClusterIcon;
+            return new L.DivIcon({
+                html: '<div><span>' + count + '</span></div>',
+                className: 'marker-cluster marker-cluster-' + size,
+                iconSize: new L.Point(40, 40)
+            });
+        }
+    });
 
     let colorIndex = 4; // arbitrary
     for (const url of config.geojsonFiles) {
@@ -34,19 +68,28 @@ async function loadTravelogueGeojson(config, leafletMap) {
                 console.error(`Failed to fetch ${url}: ${response.statusText}`);
                 continue;
             }
-            const geojson = await response.json();
-            // L.geoJSON(geojson).addTo(leafletMap);
-            // rotate through colors as adding new lines
-            const color = getColorForLine(colorIndex);
-            L.geoJSON(geojson, {
+            const geojsonData = await response.json();
+
+            // handle lines only
+            L.geoJSON(geojsonData, {
+                filter: function(feature) {
+                    return feature.geometry.type === 'LineString' || feature.geometry.type === 'MultiLineString';
+                },
                 style: function (feature) {
-                    if (feature.geometry.type === 'LineString' || feature.geometry.type === 'MultiLineString') {
-                        return { 
-                            color: color,
+                        return {
+                            color: getColorForLine(colorIndex),
                             opacity: 0.4,
                             weight: 20
                          };
-                    }
+                }
+            },
+            ).addTo(leafletMap);
+            
+            // rotate through colors as adding new lines
+            const color = getColorForLine(colorIndex);
+            L.geoJSON(geojsonData, {
+                filter: function(feature) {
+                    return feature.geometry.type === 'Point';
                 },
                 pointToLayer: function(gjPoint, latlng) {
                     return L.marker(latlng, {icon: artifactIcon});
@@ -59,11 +102,12 @@ async function loadTravelogueGeojson(config, leafletMap) {
                     }
                     layer.bindPopup(`${feature.properties.type}, ${date_label}`);
                 }
-            }).addTo(leafletMap);
+            }).addTo(markers);
         } catch (err) {
             console.error(`Error loading GeoJSON from ${url}:`, err);
         }
     }
+    leafletMap.addLayer(markers);
 }
 
 
