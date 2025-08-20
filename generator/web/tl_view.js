@@ -10,6 +10,8 @@ function getColorForLine(index) {
     return `hsl(${hue}, 100%, 50%)`;
 }
 
+
+
 async function loadTravelogueGeojson(config, leafletMap) {
     if (!config.geojsonFiles || !Array.isArray(config.geojsonFiles)) {
         console.error("No geojsonFiles array found in Config.");
@@ -18,7 +20,6 @@ async function loadTravelogueGeojson(config, leafletMap) {
 
     const artifactIcon = L.icon({
 			iconUrl:"/assets/babyloupe.png", 
-			// iconRetinaUrl:"/tent144.png", 
 			iconSize:[39,39],
 			iconAnchor:[20,20],
 			popupAnchor:[0,-20]
@@ -26,28 +27,19 @@ async function loadTravelogueGeojson(config, leafletMap) {
 	)
     const artifactClusterIcon = L.icon({
 			iconUrl:"/assets/babyloupeplus.png", 
-			// iconRetinaUrl:"/tent144.png", 
 			iconSize:[39,39],
 			iconAnchor:[20,20],
 			popupAnchor:[0,-20]
 		}
 	)
 
-
     var markers = L.markerClusterGroup({
-        // Cluster radius in pixels
         maxClusterRadius: 40,
-
-        // Disable clustering at certain zoom level
         disableClusteringAtZoom: 15,
-
-        // Animation options
         animate: true,
         animateAddingMarkers: true,
-
-        // Custom cluster icon
         iconCreateFunction: function (cluster) {
-            return artifactIcon;
+            return artifactClusterIcon;
         }
     });
 
