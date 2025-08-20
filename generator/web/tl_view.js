@@ -47,15 +47,7 @@ async function loadTravelogueGeojson(config, leafletMap) {
 
         // Custom cluster icon
         iconCreateFunction: function (cluster) {
-            var count = cluster.getChildCount();
-            var size = count < 10 ? 'small' : count < 100 ? 'medium' : 'large';
-
-            return artifactClusterIcon;
-            return new L.DivIcon({
-                html: '<div><span>' + count + '</span></div>',
-                className: 'marker-cluster marker-cluster-' + size,
-                iconSize: new L.Point(40, 40)
-            });
+            return artifactIcon;
         }
     });
 
