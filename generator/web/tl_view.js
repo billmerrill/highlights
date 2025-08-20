@@ -16,6 +16,15 @@ async function loadTravelogueGeojson(config, leafletMap) {
         return;
     }
 
+    const artifactIcon = L.icon({
+			iconUrl:"/assets/babyloupe.png", 
+			// iconRetinaUrl:"/tent144.png", 
+			iconSize:[39,39],
+			iconAnchor:[20,20],
+			popupAnchor:[0,-20]
+		}
+	)
+
     let colorIndex = 4; // arbitrary
     for (const url of config.geojsonFiles) {
         colorIndex++;
@@ -38,6 +47,17 @@ async function loadTravelogueGeojson(config, leafletMap) {
                             weight: 20
                          };
                     }
+                },
+                pointToLayer: function(gjPoint, latlng) {
+                    return L.marker(latlng, {icon: artifactIcon});
+                },
+                onEachFeature: function(feature, layer) {
+                    date_label = ""
+                    if (feature.properties.timestamp) {
+                        // date_label = new Date(feature.properties.timestamp).toLocaleDateString();
+                        date_label = feature.properties.timestamp;
+                    }
+                    layer.bindPopup(`${feature.properties.type}, ${date_label}`);
                 }
             }).addTo(leafletMap);
         } catch (err) {
@@ -48,6 +68,7 @@ async function loadTravelogueGeojson(config, leafletMap) {
 
 
 function loadTrip(config, map) {
+    
     map.fitBounds(config.bbox);
 
 	loadTravelogueGeojson(tripConfig, map);
