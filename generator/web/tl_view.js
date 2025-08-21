@@ -38,9 +38,27 @@ async function loadTravelogueGeojson(config, leafletMap) {
         disableClusteringAtZoom: 15,
         animate: true,
         animateAddingMarkers: true,
+        removeOutsideVisibleBounds: true,
+
         iconCreateFunction: function (cluster) {
             return artifactClusterIcon;
         }
+    });
+
+
+    // No artifact points below zoom level 8
+    leafletMap.on('zoomend', function () {
+        var zoom = leafletMap.getZoom();
+        if (zoom >= 8) {
+            if (!leafletMap.hasLayer(markers)) {
+                leafletMap.addLayer(markers);
+            }
+        } else {
+            if (leafletMap.hasLayer(markers)) {
+                leafletMap.removeLayer(markers);
+            }
+        }
+
     });
 
     let colorIndex = 4; // arbitrary
@@ -54,7 +72,7 @@ async function loadTravelogueGeojson(config, leafletMap) {
             }
             const geojsonData = await response.json();
 
-            // handle lines only
+            // handle lines 
             L.geoJSON(geojsonData, {
                 filter: function(feature) {
                     return feature.geometry.type === 'LineString' || feature.geometry.type === 'MultiLineString';
@@ -68,9 +86,8 @@ async function loadTravelogueGeojson(config, leafletMap) {
                 }
             },
             ).addTo(leafletMap);
-            
-            // rotate through colors as adding new lines
-            const color = getColorForLine(colorIndex);
+           
+            // handle points
             L.geoJSON(geojsonData, {
                 filter: function(feature) {
                     return feature.geometry.type === 'Point';
